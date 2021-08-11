@@ -14,7 +14,7 @@ from flask import current_app
 from PixivUtil2.PixivModelFanbox import FanboxArtist, FanboxPost
 
 from ..internals.database.database import get_conn, get_raw_conn, return_conn
-from ..lib.artist import index_artists, is_artist_dnp, update_artist, delete_artist_cache_keys
+from ..lib.artist import index_artists, is_artist_dnp, update_artist, delete_artist_cache_keys, delete_comment_cache_keys
 from ..lib.post import post_flagged, post_exists, delete_post_flags, move_to_backup, delete_backup, restore_from_backup, comment_exists
 from ..internals.utils.proxy import get_proxy
 from ..internals.utils.download import download_file, DownloaderException
@@ -63,6 +63,7 @@ def import_comment(comment, user_id, post_id, import_id):
     
     if (config.ban_url):
         requests.request('BAN', f"{config.ban_url}/{post_model['service']}/user/" + user_id + '/post/' + post_model['post_id'])
+    delete_comment_cache_keys(post_model['service'], user_id, post_model['post_id'])
 
 def import_comments(key, post_id, user_id, import_id, url = None):
     if not url:
@@ -253,7 +254,7 @@ def import_posts(import_id, key, url = 'https://api.fanbox.cc/post.listSupportin
                     cursor = conn.cursor()
                     cursor.execute(query, list(post_model.values()))
                     conn.commit()
-                except:
+                finally:
                     return_conn(conn)
 
                 update_artist('fanbox', user_id)

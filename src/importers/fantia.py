@@ -219,7 +219,7 @@ def import_fanclub(fanclub_id, import_id, jar, page = 1):
                 cursor = conn.cursor()
                 cursor.execute(query, list(post_model.values()))
                 conn.commit()
-            except:
+            finally:
                 return_conn(conn)
 
             update_artist('fantia', user_id)

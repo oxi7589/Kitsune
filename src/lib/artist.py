@@ -8,6 +8,14 @@ from ..internals.utils.proxy import get_proxy
 from ..internals.cache.redis import delete_keys, delete_keys_pattern
 from ..internals.database.database import get_raw_conn, return_conn, get_cursor
 
+def delete_dm_cache_keys(service, artist_id):
+    artist_id = str(artist_id)
+    delete_keys([ 'dms:' + service + ':' + artist_id ])
+
+def delete_comment_cache_keys(service, artist_id, post_id):
+    artist_id = str(artist_id)
+    delete_keys([ 'comments:' + service + ':' + artist_id ])
+
 def delete_artist_cache_keys(service, artist_id):
     artist_id = str(artist_id)
     keys = [
@@ -133,7 +141,7 @@ def update_artist(service, artist_id):
         cursor = conn.cursor()
         cursor.execute('UPDATE lookup SET updated = CURRENT_TIMESTAMP WHERE service = %s AND id = %s', (service, artist_id))
         conn.commit()
-    except:
+    finally:
         return_conn(conn)
 
 def index_discord_channel_server(channel_data, server_data):

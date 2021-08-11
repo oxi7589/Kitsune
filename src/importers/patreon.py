@@ -21,7 +21,7 @@ from gallery_dl import text
 from flask import current_app
 
 from ..internals.database.database import get_conn, get_raw_conn, return_conn
-from ..lib.artist import index_artists, is_artist_dnp, update_artist, delete_artist_cache_keys, dm_exists
+from ..lib.artist import index_artists, is_artist_dnp, update_artist, delete_artist_cache_keys, dm_exists, delete_comment_cache_keys, delete_dm_cache_keys
 from ..lib.post import post_flagged, post_exists, delete_post_flags, move_to_backup, delete_backup, restore_from_backup, comment_exists
 from ..internals.utils.download import download_file, DownloaderException
 from ..internals.utils.proxy import get_proxy
@@ -554,6 +554,10 @@ def import_channel(auth_token, url, import_id, current_user, contributor_id, tim
                 conn.commit()
             finally:
                 return_conn(conn)
+            
+            if (config.ban_url):
+                requests.request('BAN', f"{config.ban_url}/{post_model['service']}/user/" + user_id + "/dms")
+            delete_dm_cache_keys(post_model['service'], user_id)
         elif (message['type'] == 'FILE'):
             log(import_id, f'Skipping message {dm_id} because file DMs are unsupported', to_client=True)
             continue
@@ -633,6 +637,7 @@ def import_comment(comment, user_id, import_id):
 
     if (config.ban_url):
         requests.request('BAN', f"{config.ban_url}/{post_model['service']}/user/" + user_id + '/post/' + post_model['post_id'])
+    delete_comment_cache_keys(post_model['service'], user_id, post_model['post_id'])
 
 def import_comments(url, key, post_id, user_id, import_id):
     try:

@@ -1,8 +1,9 @@
 from flask import g, current_app
-import psycopg2
-from psycopg2 import pool
+from psycopg2_pool import ThreadSafeConnectionPool
+from psycopg2.extensions import make_dsn
 from psycopg2.extras import RealDictCursor
 from os import getenv
+import traceback
 import config
 
 pool = None
@@ -10,13 +11,14 @@ pool = None
 def init():
     global pool
     try:
-        pool = psycopg2.pool.ThreadedConnectionPool(1, 5000,
-            host = config.database_host,
-            dbname = config.database_dbname,
-            user = config.database_user,
-            password = config.database_password,
-            port = 5432,
-            cursor_factory = RealDictCursor
+        pool = ThreadSafeConnectionPool(minconn=0, maxconn=5000, idle_timeout=300,
+            dsn=make_dsn(
+                host = config.database_host,
+                dbname = config.database_dbname,
+                user = config.database_user,
+                password = config.database_password,
+                port = 5432
+            )
         )
     except Exception as e:
         print(f'Failed to connect to the database: {e}')
@@ -33,11 +35,14 @@ def get_cursor():
     return g.cursor
 
 def get_raw_conn():
-    return pool.getconn()
+    conn = pool.getconn()
+    conn.cursor_factory = RealDictCursor
+    return conn
 
 def get_conn():
     if 'connection' not in g:
         g.connection = pool.getconn()
+        g.connection.cursor_factory = RealDictCursor
     return g.connection
 
 def return_conn(conn):
