@@ -1,5 +1,8 @@
+name: Kitsune Container Build
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - '**.md'
   workflow_dispatch: []
@@ -28,11 +31,6 @@ jobs:
       -
         name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-        with:
-          buildkitd-flags: "--debug"
-      -
-        name: Available platforms
-        run: echo ${{ steps.buildx.outputs.platforms }}
       -
         name: Login to GHCR
         if: github.event_name != 'pull_request'
