@@ -1,0 +1,16 @@
+# python cache
+__pycache__
+# env variables
+venv
+.env
+.env.*
+# git files
+.git
+.gitignore
+# docker files
+Dockerfile
+Dockerfile*
+.dockerignore
+# VSCode files
+*.code-workspace
+.vscode
