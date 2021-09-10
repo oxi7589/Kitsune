@@ -44,24 +44,34 @@ def import_posts(import_id, key, offset = 1):
 
     users = {}
     for user_info_list in scraper_data['creator_counts'].keys():
-        parsed_user_info_list = json.loads(user_info_list)
+        parsed_user_info_list = json.loads(user_info_list) # (username, display name, ID), username can be null
         users[parsed_user_info_list[1]] = parsed_user_info_list[2]
 
-    user_id = None
     for product in products:
         try:
             backup_path = None
 
             post_id = product['data-permalink']
-            purchase_download_url = product.find(class_='js-product')['data-purchase-download-url']
-            title = product.select_one('.description-container h1 strong').string
+            user_id = None
+            cover_url = None
+            purchase_download_url = None
 
-            user_name_element = get_value(product.find_all('a', {'class':'js-creator-profile-link'}), 0)
-            if user_name_element is None:
-                log(import_id, f'Skipping post {post_id}. Could not find user information.')
+            properties_element = product.find('div', {'data-react-class':'Product/LibraryCard'})
+            react_props = json.loads(properties_element['data-react-props'])
+            if not 'purchase' in react_props:
+                log(import_id, f"Skipping post {post_id} from user {user_id} because it has no purchase data")
                 continue
-            else:
-                user_id = users[user_name_element.text.strip()]
+            elif react_props['purchase']['is_archived']:
+                # this check is redundant, but better safe than sorry:
+                # archived products may contain sensitive data such as a watermark with an e-mail on it
+                log(import_id, f"Skipping post {post_id} from user {user_id} because it is archived")
+                continue
+
+            react_props_product = react_props['product']
+            title = react_props_product['name']
+            creator_name = react_props_product['creator']['name']
+            user_id = users[creator_name]
+            purchase_download_url = react_props['purchase']['download_url']
 
             file_directory = f"files/gumroad/{user_id}/{post_id}"
             attachments_directory = f"attachments/gumroad/{user_id}/{post_id}"
@@ -94,6 +104,13 @@ def import_posts(import_id, key, offset = 1):
                 'attachments': []
             }
 
+            if 'main_cover_id' in react_props_product:
+                main_cover_id = react_props_product['main_cover_id']
+                for cover in react_props_product['covers']:
+                    if cover['id'] == main_cover_id:
+                        cover_url = get_value(cover, 'original_url') or cover['url']
+
+
             scraper3 = create_scrapper_session().get(
                 purchase_download_url,
                 cookies = { '_gumroad_app_session': key },
@@ -101,9 +118,7 @@ def import_posts(import_id, key, offset = 1):
             )
             scraper_data3 = scraper3.text
             soup3 = BeautifulSoup(scraper_data3, 'html.parser')
-            thumbnail1 = soup3.select_one('.image-preview-container img').get('src') if soup3.select_one('.image-preview-container img') else None
-            thumbnail2 = soup3.select_one('.image-preview-container img').get('data-cfsrc') if soup3.select_one('.image-preview-container img') else None
-            thumbnail3 = soup3.select_one('.image-preview-container noscript img').get('src') if soup3.select_one('.image-preview-container noscript img') else None
+
             try:
                 download_data = json.loads(soup3.select_one('div[data-react-class="DownloadPage/FileList"]')['data-react-props'])
             except:
@@ -111,11 +126,10 @@ def import_posts(import_id, key, offset = 1):
                   "content_items": []
                 }
 
-            thumbnail = thumbnail1 or thumbnail2 or thumbnail3
-            if thumbnail:
+            if cover_url:
                 filename, _ = download_file(
                     join(config.download_path, file_directory),
-                    thumbnail
+                    cover_url
                 )
                 post_model['file']['name'] = filename
                 post_model['file']['path'] = f'/{file_directory}/{filename}'
