@@ -22,10 +22,11 @@ from ..internals.utils.logger import log
 from ..internals.utils.utils import get_value
 from ..internals.utils.scrapper import create_scrapper_session
 
-def import_posts(import_id, key, offset = 1):
+def import_posts_from_user(import_id, key, user_info_list, offset = 1):
     try:
+        user_id = user_info_list[2]
         scraper = create_scrapper_session().get(
-            f"https://gumroad.com/discover_search?from={offset}&user_purchases_only=true",
+            f"https://gumroad.com/discover_search?from={offset}&user_purchases_only=true&creator_external_ids%5B%5D={user_id}",
             cookies = { '_gumroad_app_session': key },
             proxies=get_proxy()
         )
@@ -42,17 +43,11 @@ def import_posts(import_id, key, offset = 1):
     soup = BeautifulSoup(scraper_data['products_html'], 'html.parser')
     products = soup.find_all(class_='product-card')
 
-    users = {}
-    for user_info_list in scraper_data['creator_counts'].keys():
-        parsed_user_info_list = json.loads(user_info_list) # (username, display name, ID), username can be null
-        users[parsed_user_info_list[1]] = parsed_user_info_list[2]
-
     for product in products:
         try:
             backup_path = None
 
             post_id = product['data-permalink']
-            user_id = None
             cover_url = None
             purchase_download_url = None
 
@@ -67,11 +62,19 @@ def import_posts(import_id, key, offset = 1):
                 log(import_id, f"Skipping post {post_id} from user {user_id} because it is archived")
                 continue
 
+            purchase_download_url = react_props['purchase']['download_url']
+
             react_props_product = react_props['product']
             title = react_props_product['name']
-            creator_name = react_props_product['creator']['name']
-            user_id = users[creator_name]
-            purchase_download_url = react_props['purchase']['download_url']
+
+            # sanity check to make sure creator_external_ids[] url filter has done its job
+            # (except for creators who have closed their stores, there is no way to double-check those)
+            if 'creator' in react_props_product and react_props_product['creator']:
+                creator_name = react_props_product['creator']['name']
+                creator_name_expected = user_info_list[1]
+                if creator_name_expected.strip() != creator_name.strip():
+                    log(import_id, f"Skipping post {post_id} from user {user_id} because of inconsistent creator data")
+                    continue
 
             file_directory = f"files/gumroad/{user_id}/{post_id}"
             attachments_directory = f"attachments/gumroad/{user_id}/{post_id}"
@@ -109,7 +112,6 @@ def import_posts(import_id, key, offset = 1):
                 for cover in react_props_product['covers']:
                     if cover['id'] == main_cover_id:
                         cover_url = get_value(cover, 'original_url') or cover['url']
-
 
             scraper3 = create_scrapper_session().get(
                 purchase_download_url,
@@ -191,8 +193,33 @@ def import_posts(import_id, key, offset = 1):
     if len(products):
         next_offset = offset + scraper_data['result_count']
         log(import_id, f'Finished processing offset {offset}. Processing offset {next_offset}')
-        import_posts(import_id, key, offset=next_offset)
-    else:
+        import_posts_from_user(import_id, key, user_info_list, offset=next_offset)
+
+
+def import_posts(import_id, key):
+    try:
+        scraper = create_scrapper_session().get(
+            f"https://gumroad.com/discover_search?user_purchases_only=true",
+            cookies = { '_gumroad_app_session': key },
+            proxies=get_proxy()
+        )
+        scraper_data = scraper.json()
+        scraper.raise_for_status()
+    except requests.HTTPError:
+        log(import_id, f'Status code {scraper_data.status_code} when contacting Gumroad API.', 'exception')
+        return
+
+    if (scraper_data['total'] > 100000):
+        log(import_id, f"Can't log in; is your session key correct?")
+        return
+
+    try:
+        for user_info_list in scraper_data['creator_counts'].keys():
+            parsed_user_info_list = json.loads(user_info_list) # (username, display name, ID), username can be null
+            user_id = parsed_user_info_list[2]
+            log(import_id, f"Importing posts from user {user_id}")
+            import_posts_from_user(import_id, key, parsed_user_info_list)
+    finally:
         log(import_id, f"Finished scanning for posts.")
         index_artists()
 
