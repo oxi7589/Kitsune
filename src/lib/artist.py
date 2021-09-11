@@ -104,6 +104,9 @@ def index_artists(**kwargs):
                     }
                 except requests.HTTPError as e:
                     if e.response.status_code == 404:
+                        # Gumroad product can be imported after the store it's from has closed down.
+                        # Store page will return 404 in this case, but creator display name can still be accessed during
+                        # import time, so the mapping of ID to display name is passed here directly from the importer.
                         if not 'gumroad_name_fallback' in kwargs:
                             continue
                         gumroad_name_fallback = kwargs['gumroad_name_fallback']

@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 from os.path import join
 from os import makedirs
 
+from typing import List
+
 from flask import current_app
 
 from ..internals.database.database import get_conn, get_raw_conn, return_conn
@@ -22,7 +24,7 @@ from ..internals.utils.logger import log
 from ..internals.utils.utils import get_value
 from ..internals.utils.scrapper import create_scrapper_session
 
-def import_posts_from_user(import_id, key, user_info_list, offset = 1):
+def import_posts_from_user(import_id: str, key: str, user_info_list: List[str], offset: int = 1):
     try:
         user_id = user_info_list[2]
         scraper = create_scrapper_session().get(
@@ -213,7 +215,12 @@ def import_posts(import_id, key):
         log(import_id, f"Can't log in; is your session key correct?")
         return
 
-    user_displayname_by_id = {}
+    # Products are requested for each creator individualy using the "creator_external_ids[]" API query param
+    # instead of processing the complete library (https://gumroad.com/discover_search?user_purchases_only=true) directly.
+    # It is done to avoid misattributing products to wrong creators (product details do not contain the numberic creator's ID,
+    # and display names are not necessarily unique), and to associate products from closed down stores with the respective user IDs
+    # (these products don't have any creator data at all).
+    user_displayname_by_id = {} # ID to display name mapping to be used by artists indexer for closed down stores
     try:
         for user_info_list in scraper_data['creator_counts'].keys():
             parsed_user_info_list = json.loads(user_info_list) # (username, display name, ID), username can be null
