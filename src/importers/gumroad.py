@@ -213,15 +213,17 @@ def import_posts(import_id, key):
         log(import_id, f"Can't log in; is your session key correct?")
         return
 
+    user_displayname_by_id = {}
     try:
         for user_info_list in scraper_data['creator_counts'].keys():
             parsed_user_info_list = json.loads(user_info_list) # (username, display name, ID), username can be null
             user_id = parsed_user_info_list[2]
+            user_displayname_by_id[user_id] = parsed_user_info_list[1]
             log(import_id, f"Importing posts from user {user_id}")
             import_posts_from_user(import_id, key, parsed_user_info_list)
     finally:
         log(import_id, f"Finished scanning for posts.")
-        index_artists()
+        index_artists(gumroad_name_fallback=user_displayname_by_id)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:

@@ -68,7 +68,7 @@ def is_artist_dnp(service, artist_id):
     return_conn(conn)
     return len(results) > 0
 
-def index_artists():
+def index_artists(**kwargs):
     conn = get_raw_conn()
     cursor = conn.cursor()
 
@@ -93,13 +93,29 @@ def index_artists():
                     "service": "fanbox"
                 }
             elif post["service"] == 'gumroad':
-                resp = requests.get('https://gumroad.com/' + post["user"], proxies=get_proxy()).text
-                soup = BeautifulSoup(resp, 'html.parser')
-                model = {
-                    "id": post["user"],
-                    "name": soup.find('strong', class_='creator-profile-card__name').string.replace("\n", ""),
-                    "service": "gumroad"
-                }
+                try:
+                    resp = requests.get('https://gumroad.com/' + post["user"], proxies=get_proxy())
+                    resp.raise_for_status()
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    model = {
+                        "id": post["user"],
+                        "name": soup.find('strong', class_='creator-profile-card__name').string.replace("\n", ""),
+                        "service": "gumroad"
+                    }
+                except requests.HTTPError as e:
+                    if e.response.status_code == 404:
+                        if not 'gumroad_name_fallback' in kwargs:
+                            continue
+                        gumroad_name_fallback = kwargs['gumroad_name_fallback']
+                        if not post["user"] in gumroad_name_fallback:
+                            continue
+                        model = {
+                            "id": post["user"],
+                            "name": gumroad_name_fallback[post["user"]].strip(),
+                            "service": "gumroad"
+                        }
+                    else:
+                        raise
             elif post["service"] == 'subscribestar':
                 resp = requests.get('https://subscribestar.adult/' + post["user"], proxies=get_proxy()).text
                 soup = BeautifulSoup(resp, 'html.parser')
